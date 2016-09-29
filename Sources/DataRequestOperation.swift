@@ -15,7 +15,9 @@ import Alamofire
 /// - Note: Auto Retry is available only in `DataRequestEventuallyOperation`.
 open class DataRequestOperation<R: Requestable>: Operation {
     
-    var request: Alamofire.DataRequest!
+    var request: Alamofire.DataRequest {
+        return AlamofireUtils.alamofireDataRequestFromRequestable(self.requestable)
+    }
     let requestable: R
     let completionHandler: ((Alamofire.DataResponse<R.Model>) -> Void)?
     var retryAttempts = 0
@@ -127,10 +129,17 @@ open class DataRequestOperation<R: Requestable>: Operation {
         executeRequest()
     }
     
+    /// Advises the operation object that it should stop executing its request.
+    open override func cancel() {
+        request.cancel()
+        isExecuting = false
+        isCancelled = true
+        isFinished = true
+    }
+    
     func executeRequest() {
-        request = AlamofireUtils.alamofireDataRequestFromRequestable(requestable)
         request.response(queue: requestable.queue, responseSerializer: requestable.dataResponseSerializer) { (response: Alamofire.DataResponse<Any>) in
-            let transformedResult: Result<R.Model> = AlamofireUtils.castAnyResultToRequestableModel(result: response.result)
+            let transformedResult: Result<R.Model> = self.castAnyResultToRequestableModel(result: response.result)
             let transformedResponse = Alamofire.DataResponse<R.Model>(request: response.request, response: response.response, data: response.data, result: transformedResult, timeline: response.timeline)
             if transformedResponse.result.error == nil {
                 self.successful = true
@@ -152,12 +161,14 @@ open class DataRequestOperation<R: Requestable>: Operation {
         if let completionHandler = self.completionHandler { completionHandler(response) }
     }
     
-    /// Advises the operation object that it should stop executing its request.
-    open override func cancel() {
-        request.cancel()
-        isExecuting = false
-        isCancelled = true
-        isFinished = true
+    func castAnyResultToRequestableModel<M>(result: Result<Any>) -> Result<M> {
+        if let error = result.error {
+            return .failure(error)
+        } else if let value = result.value as? M {
+            return .success(value)
+        } else {
+            fatalError("ResponseSerializer failed to serialize the response to Requestable Model of type \(M.self)")
+        }
     }
     
 }
