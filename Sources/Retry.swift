@@ -43,3 +43,9 @@ public struct Retry {
     public init() {}
     
 }
+
+extension URLError: Hashable {
+    public var hashValue: Int {
+        return self.code.rawValue &* 16777619
+    }
+}
